@@ -292,6 +292,7 @@
 
       document.getElementById('view-history-btn').addEventListener('click', () => {
         historyModal.classList.toggle('hidden');
+        getProgressData(showFullHistory); // <-- Add this line
       });
 
       document.getElementById('close-history-modal').addEventListener('click', () => {
