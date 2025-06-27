@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Lectures Track</title>
+  <!-- Tailwind CSS CDN (fine for dev/testing) -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <!-- Firebase SDK -->
   <script type="module">
@@ -28,10 +30,7 @@
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
 
-    document.addEventListener('DOMContentLoaded', async function () {
-      const physicsCheckbox = document.getElementById('physics-checkbox');
-      const chemistryCheckbox = document.getElementById('chemistry-checkbox');
-      const mathsCheckbox = document.getElementById('maths-checkbox');
+    document.addEventListener('DOMContentLoaded', function () {
       const checkboxes = document.querySelectorAll('.subject-checkbox');
       const completionModal = document.getElementById('completion-modal');
       const closeModalBtn = document.getElementById('close-modal');
@@ -39,15 +38,7 @@
       const progressChartCanvas = document.getElementById('progressChart');
       let progressChart;
 
-      // Wait for checkbox states to load
-      await loadCheckboxStates();
-
-      // Now safely check if it's a new day
-      checkNewDay();
-
-      // Initialize chart and event listeners
-      initializeChart();
-
+      // --- Event Listeners ---
       checkboxes.forEach(cb => {
         cb.addEventListener('change', () => {
           saveCheckboxStates();
@@ -64,51 +55,44 @@
         if (confirm('Are you sure you want to reset all data? This cannot be undone.')) {
           set(ref(database, 'public'), null);
           checkboxes.forEach(cb => cb.checked = false);
-          initializeChart();
+          updateChartData();
         }
       });
 
-      // Save checkbox state before leaving page
-      window.addEventListener('beforeunload', () => {
-        saveCheckboxStates();
-      });
-    });
-
-    // --- Helper Functions ---
-
-    function checkNewDay() {
-      const today = new Date().toDateString();
-      const lastVisit = localStorage.getItem('lastVisitDate');
-      if (lastVisit !== today) {
-        const checkboxes = document.querySelectorAll('.subject-checkbox');
-        checkboxes.forEach(cb => cb.checked = false);
-        if (lastVisit) saveYesterdayProgress();
-        localStorage.removeItem('popupShownToday');
-        localStorage.setItem('lastVisitDate', today);
-        saveCheckboxStates();
+      // --- App Initialization ---
+      function initApp() {
+        checkNewDay();
+        loadCheckboxStates();
       }
-    }
 
-    function saveYesterdayProgress() {
-      const checkboxes = document.querySelectorAll('.subject-checkbox');
-      const completedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const dateStr = yesterday.toDateString().replace(/\s+/g, '_');
+      function checkNewDay() {
+        const today = new Date().toDateString();
+        const lastVisit = localStorage.getItem('lastVisitDate');
+        if (lastVisit !== today) {
+          checkboxes.forEach(cb => cb.checked = false);
+          if (lastVisit) saveYesterdayProgress();
+          localStorage.removeItem('popupShownToday');
+          localStorage.setItem('lastVisitDate', today);
+          saveCheckboxStates();
+        }
+      }
 
-      set(ref(database, `public/history/${dateStr}`), {
-        count: completedCount
-      }).then(() => {
-        console.log(`Saved yesterday's progress: ${completedCount} tasks`);
-      }).catch(error => {
-        console.error("Failed to save yesterday's progress:", error);
-      });
-    }
+      function saveYesterdayProgress() {
+        const completedCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+        if (completedCount > 0) {
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const dateStr = yesterday.toDateString().replace(/\s+/g, '_');
+          set(ref(database, `public/history/${dateStr}`), {
+            count: completedCount
+          }).catch(err => {
+            console.error("Failed to save yesterday's progress:", err);
+          });
+        }
+      }
 
-    function loadCheckboxStates() {
-      return new Promise((resolve) => {
+      function loadCheckboxStates() {
         const tasksRef = ref(database, 'public/tasks');
-        const checkboxes = document.querySelectorAll('.subject-checkbox');
         onValue(tasksRef, snapshot => {
           const data = snapshot.val();
           if (data) {
@@ -116,164 +100,182 @@
               if (data[cb.id] !== undefined) cb.checked = data[cb.id];
             });
           }
-          resolve();
+          initializeChart(); // Only now that data is loaded
         }, {
           onlyOnce: true
         });
-      });
-    }
-
-    function saveCheckboxStates() {
-      const checkboxes = document.querySelectorAll('.subject-checkbox');
-      const data = {};
-      checkboxes.forEach(cb => {
-        data[cb.id] = cb.checked;
-      });
-      set(ref(database, 'public/tasks'), data);
-    }
-
-    function checkCompletion() {
-      const checkboxes = document.querySelectorAll('.subject-checkbox');
-      const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-      const popupShownToday = localStorage.getItem('popupShownToday') === 'true';
-      if (allChecked && !popupShownToday) {
-        const completionModal = document.getElementById('completion-modal');
-        completionModal.classList.remove('hidden');
-        localStorage.setItem('popupShownToday', 'true');
       }
-    }
 
-    function getProgressData(callback) {
-      const historyRef = ref(database, 'public/history');
-      onValue(historyRef, snapshot => {
-        const history = [];
-        snapshot.forEach(childSnapshot => {
-          const key = childSnapshot.key.replace(/_/g, ' ');
-          const val = childSnapshot.val();
-          history.push({ date: key, count: val.count });
+      function saveCheckboxStates() {
+        const data = {};
+        checkboxes.forEach(cb => {
+          data[cb.id] = cb.checked;
         });
-        callback(history);
-      }, {
-        onlyOnce: true
-      });
-    }
+        set(ref(database, 'public/tasks'), data);
+      }
 
-    function initializeChart() {
-      getProgressData(function(progressData) {
-        const checkboxes = document.querySelectorAll('.subject-checkbox');
-        const labels = [];
-        const data = [];
-        const daysToShow = 7;
-        const today = new Date();
-        for (let i = daysToShow - 1; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(today.getDate() - i);
-          const dateStr = date.toDateString();
-          const dayData = progressData.find(item => item.date === dateStr);
-          labels.push(getShortDateLabel(date));
-          if (i === 0) {
-            const currentCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            data.push(currentCount);
-          } else {
-            data.push(dayData ? dayData.count : 0);
-          }
+      function checkCompletion() {
+        const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+        const popupShownToday = localStorage.getItem('popupShownToday') === 'true';
+        if (allChecked && !popupShownToday) {
+          completionModal.classList.remove('hidden');
+          localStorage.setItem('popupShownToday', 'true');
         }
-        if (progressChart) {
-          progressChart.data.labels = labels;
-          progressChart.data.datasets[0].data = data;
-          progressChart.update();
-        } else {
-          const ctx = progressChartCanvas.getContext('2d');
-          progressChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-              labels,
-              datasets: [{
-                label: 'Tasks Completed',
-                data,
-                borderColor: '#4fd1c5',
-                backgroundColor: 'rgba(79, 209, 197, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.3,
-                pointBackgroundColor: '#4fd1c5',
-                pointBorderColor: '#ffffff',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-              }]
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              scales: {
-                y: {
-                  beginAtZero: true,
-                  max: 3,
-                  ticks: { color: '#a0aec0', stepSize: 1 },
-                  grid: { color: 'rgba(74, 85, 104, 0.3)' }
-                },
-                x: {
-                  ticks: { color: '#a0aec0' },
-                  grid: { color: 'rgba(74, 85, 104, 0.3)' }
-                }
-              },
-              plugins: {
-                legend: { display: false },
-                tooltip: {
-                  backgroundColor: '#1a202c',
-                  titleColor: '#ffffff',
-                  bodyColor: '#e2e8f0',
-                  borderColor: '#4a5568',
-                  borderWidth: 1,
-                  padding: 12,
-                  displayColors: false,
-                  callbacks: {
-                    label: context => `${context.raw} task${context.raw !== 1 ? 's' : ''} completed`
-                  }
-                }
-              }
+      }
+
+      function getProgressData(callback) {
+        const historyRef = ref(database, 'public/history');
+        onValue(historyRef, snapshot => {
+          const history = [];
+          snapshot.forEach(childSnapshot => {
+            const key = childSnapshot.key.replace(/_/g, ' ');
+            const val = childSnapshot.val();
+            if (val && typeof val.count === 'number') {
+              history.push({ date: key, count: val.count });
             }
           });
-        }
-      });
-    }
+          callback(history);
+        }, {
+          onlyOnce: true
+        });
+      }
 
-    function getShortDateLabel(date) {
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const dayName = days[date.getDay()];
-      const month = date.getMonth() + 1;
-      const dayNum = date.getDate();
-      return `${dayName} ${month}/${dayNum}`;
-    }
+      function initializeChart() {
+        getProgressData(function(progressData) {
+          const labels = [];
+          const data = [];
+          const daysToShow = 7;
+          const today = new Date();
 
-    function updateChartData() {
-      getProgressData(function(progressData) {
-        const checkboxes = document.querySelectorAll('.subject-checkbox');
-        const labels = [];
-        const data = [];
-        const daysToShow = 7;
-        const today = new Date();
-        for (let i = daysToShow - 1; i >= 0; i--) {
-          const date = new Date();
-          date.setDate(today.getDate() - i);
-          const dateStr = date.toDateString();
-          const dayData = progressData.find(item => item.date === dateStr);
-          labels.push(getShortDateLabel(date));
-          if (i === 0) {
-            const currentCount = Array.from(checkboxes).filter(cb => cb.checked).length;
-            data.push(currentCount);
-          } else {
-            data.push(dayData ? dayData.count : 0);
+          for (let i = daysToShow - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(today.getDate() - i);
+            const dateStr = date.toDateString();
+            const dayData = progressData.find(item => item.date === dateStr);
+
+            labels.push(getShortDateLabel(date));
+            if (i === 0) {
+              const currentCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+              data.push(currentCount);
+            } else {
+              data.push(dayData ? dayData.count : 0);
+            }
           }
-        }
-        if (progressChart) {
-          progressChart.data.labels = labels;
-          progressChart.data.datasets[0].data = data;
-          progressChart.update();
-        }
-      });
-    }
+
+          if (!progressChartCanvas) return;
+
+          const ctx = progressChartCanvas.getContext('2d');
+          if (!ctx) return;
+
+          if (progressChart) {
+            try {
+              progressChart.data.labels = labels;
+              progressChart.data.datasets[0].data = data;
+              progressChart.update();
+            } catch (e) {
+              console.error("Error updating chart:", e);
+            }
+          } else {
+            try {
+              progressChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                  labels,
+                  datasets: [{
+                    label: 'Tasks Completed',
+                    data,
+                    borderColor: '#4fd1c5',
+                    backgroundColor: 'rgba(79, 209, 197, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: '#4fd1c5',
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                  }]
+                },
+                options: {
+                  responsive: true,
+                  maintainAspectRatio: false,
+                  scales: {
+                    y: {
+                      beginAtZero: true,
+                      max: 3,
+                      ticks: { color: '#a0aec0', stepSize: 1 },
+                      grid: { color: 'rgba(74, 85, 104, 0.3)' }
+                    },
+                    x: {
+                      ticks: { color: '#a0aec0' },
+                      grid: { color: 'rgba(74, 85, 104, 0.3)' }
+                    }
+                  },
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      backgroundColor: '#1a202c',
+                      titleColor: '#ffffff',
+                      bodyColor: '#e2e8f0',
+                      borderColor: '#4a5568',
+                      borderWidth: 1,
+                      padding: 12,
+                      displayColors: false,
+                      callbacks: {
+                        label: context => `${context.raw} task${context.raw !== 1 ? 's' : ''} completed`
+                      }
+                    }
+                  }
+                }
+              });
+            } catch (e) {
+              console.error("Error creating chart:", e);
+            }
+          }
+        });
+      }
+
+      function getShortDateLabel(date) {
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const dayName = days[date.getDay()];
+        const month = date.getMonth() + 1;
+        const dayNum = date.getDate();
+        return `${dayName} ${month}/${dayNum}`;
+      }
+
+      function updateChartData() {
+        getProgressData(function(progressData) {
+          const labels = [];
+          const data = [];
+          const daysToShow = 7;
+          const today = new Date();
+
+          for (let i = daysToShow - 1; i >= 0; i--) {
+            const date = new Date();
+            date.setDate(today.getDate() - i);
+            const dateStr = date.toDateString();
+            const dayData = progressData.find(item => item.date === dateStr);
+
+            labels.push(getShortDateLabel(date));
+            if (i === 0) {
+              const currentCount = Array.from(checkboxes).filter(cb => cb.checked).length;
+              data.push(currentCount);
+            } else {
+              data.push(dayData ? dayData.count : 0);
+            }
+          }
+
+          if (progressChart) {
+            progressChart.data.labels = labels;
+            progressChart.data.datasets[0].data = data;
+            progressChart.update();
+          }
+        });
+      }
+
+      // Start app
+      initApp();
+    });
   </script>
   <style>
     /* Same styles as before */
