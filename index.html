@@ -3,22 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Lectures Track</title>
-  <!-- Tailwind CSS CDN (fine for dev/testing) -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <title>PW Lecture Tracker</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com "></script>
+
   <!-- Chart.js CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js "></script>
+
   <!-- Firebase SDK -->
   <script type="module">
     // Import Firebase modules
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js';
-    import { getDatabase, ref, onValue, set } from 'https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js';
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js ';
+    import { getDatabase, ref, onValue, set } from 'https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js ';
 
     // Your Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDRapz5yZKqV4ju4jDn4YR2jGmFcBSrHWU",
       authDomain: "studytracker-9db94.firebaseapp.com",
-      databaseURL: "https://studytracker-9db94-default-rtdb.firebaseio.com",
+      databaseURL: "https://studytracker-9db94-default-rtdb.firebaseio.com ",
       projectId: "studytracker-9db94",
       storageBucket: "studytracker-9db94.firebasestorage.app",
       messagingSenderId: "555174541240",
@@ -30,7 +33,7 @@
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
 
-    document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('DOMContentLoaded', async function () {
       const checkboxes = document.querySelectorAll('.subject-checkbox');
       const completionModal = document.getElementById('completion-modal');
       const closeModalBtn = document.getElementById('close-modal');
@@ -83,6 +86,7 @@
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
           const dateStr = yesterday.toDateString().replace(/\s+/g, '_');
+          console.log("Saving yesterday's progress:", dateStr, completedCount);
           set(ref(database, `public/history/${dateStr}`), {
             count: completedCount
           }).catch(err => {
@@ -92,17 +96,19 @@
       }
 
       function loadCheckboxStates() {
-        const tasksRef = ref(database, 'public/tasks');
-        onValue(tasksRef, snapshot => {
-          const data = snapshot.val();
-          if (data) {
-            checkboxes.forEach(cb => {
-              if (data[cb.id] !== undefined) cb.checked = data[cb.id];
-            });
-          }
-          initializeChart(); // Only now that data is loaded
-        }, {
-          onlyOnce: true
+        return new Promise((resolve) => {
+          const tasksRef = ref(database, 'public/tasks');
+          onValue(tasksRef, snapshot => {
+            const data = snapshot.val();
+            if (data) {
+              checkboxes.forEach(cb => {
+                if (data[cb.id] !== undefined) cb.checked = data[cb.id];
+              });
+            }
+            resolve();
+          }, {
+            onlyOnce: true
+          });
         });
       }
 
@@ -151,7 +157,9 @@
             const date = new Date();
             date.setDate(today.getDate() - i);
             const dateStr = date.toDateString();
-            const dayData = progressData.find(item => item.date === dateStr);
+            const dayData = progressData.find(item => {
+              return item.date.trim().replace(/\s+/g, ' ') === dateStr.trim().replace(/\s+/g, ' ');
+            });
 
             labels.push(getShortDateLabel(date));
             if (i === 0) {
@@ -172,6 +180,7 @@
               progressChart.data.labels = labels;
               progressChart.data.datasets[0].data = data;
               progressChart.update();
+              progressChart.resize(); // Force redraw
             } catch (e) {
               console.error("Error updating chart:", e);
             }
@@ -254,7 +263,9 @@
             const date = new Date();
             date.setDate(today.getDate() - i);
             const dateStr = date.toDateString();
-            const dayData = progressData.find(item => item.date === dateStr);
+            const dayData = progressData.find(item => {
+              return item.date.trim().replace(/\s+/g, ' ') === dateStr.trim().replace(/\s+/g, ' ');
+            });
 
             labels.push(getShortDateLabel(date));
             if (i === 0) {
@@ -269,12 +280,15 @@
             progressChart.data.labels = labels;
             progressChart.data.datasets[0].data = data;
             progressChart.update();
+            progressChart.resize();
           }
         });
       }
 
       // Start app
-      initApp();
+      await loadCheckboxStates();
+      checkNewDay();
+      initializeChart();
     });
   </script>
   <style>
