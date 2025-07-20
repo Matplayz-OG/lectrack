@@ -123,10 +123,8 @@
 
       function checkCompletion() {
         const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-        const popupShownToday = localStorage.getItem('popupShownToday') === 'true';
-        if (allChecked && !popupShownToday) {
+        if (allChecked) {
           completionModal.classList.remove('hidden');
-          localStorage.setItem('popupShownToday', 'true');
         }
       }
 
