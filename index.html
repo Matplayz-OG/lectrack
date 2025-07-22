@@ -205,14 +205,16 @@
                   y: {
                     beginAtZero: true,
                     max: 4,
-                     ticks: {
-                     color: '#a0aec0',
-                     stepSize: 1,
-                // Add this callback to filter out the number 4
-                     callback: function(value) {
-                   return value === 4 ? '' : value;
-                  }
-                },
+                    ticks: {
+                      color: '#a0aec0',
+                      stepSize: 1,
+      // Add this callback to filter out the number 4
+                      callback: function(value) {
+                        return value === 4 ? '' : value;
+                      }
+                    }, 
+                    grid: { color: 'rgba(74, 85, 104, 0.3)' }
+                  },
                   x: {
                     ticks: { color: '#a0aec0' },
                     grid: { color: 'rgba(74, 85, 104, 0.3)' }
